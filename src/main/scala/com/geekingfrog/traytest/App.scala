@@ -13,8 +13,10 @@ import akka.util.Timeout
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, ExecutionContext}
 
-import com.geekingfrog.traytest.db.WorkflowTable
-import com.geekingfrog.traytest.protocol.workflowProtocol._
+import com.geekingfrog.traytest._
+import com.geekingfrog.traytest.db.{WorkflowTable, WorkflowExecutionTable}
+import com.geekingfrog.traytest.protocol.{workflowProtocol => WorkflowProtocol}
+import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowExecutionProtocol}
 
 object WebServer {
   def main(args: Array[String]): Unit = {
@@ -25,14 +27,19 @@ object WebServer {
     implicit val executionContext = system.dispatcher
 
     val workflowTable = system.actorOf(Props[WorkflowTable], "worflowTableActor")
+    val workflowExecutionTable = system.actorOf(Props[WorkflowExecutionTable], "worflowExecutionTableActor")
 
     val route =
       path("hello") {
         get {
           implicit val timeout = Timeout(1 seconds)
-          val future = workflowTable ? Create(213)
-          val result = Await.result(future, timeout.duration)
-          complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "result: " + result))
+          workflowTable ! WorkflowProtocol.Create(10)
+          val future = workflowExecutionTable ? WorkflowExecutionProtocol.Create(0)
+          val result = Await.result(future, timeout.duration).asInstanceOf[Option[WorkflowExecution]]
+          complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"got stuff: $result"))
+          // val future = workflowTable ? WorkflowProtocol.Create(213)
+          // val result = Await.result(future, timeout.duration)
+          // complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "result: " + result))
         }
       }
 

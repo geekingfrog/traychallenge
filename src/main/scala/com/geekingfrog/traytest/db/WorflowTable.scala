@@ -17,10 +17,14 @@ class WorkflowTable extends Actor {
   def receive = {
     case "test" => log.info("received test")
     case WorkflowProtocol.Create(numberOfSteps) => {
-      log.info("creating workflow with id: " + numberOfSteps)
+      log.info(s"creating workflow with id: $currentIndex")
       store.put(currentIndex, Workflow(id=currentIndex, numberOfSteps=numberOfSteps))
       sender() ! currentIndex
       currentIndex += 1
+    }
+    case WorkflowProtocol.Query(id) => {
+      log.info(s"querying store for id $id")
+      sender() ! store.get(id)
     }
     case _      => log.info("received unknown message")
   }
