@@ -26,7 +26,7 @@ class WorkflowExecutionTable extends Actor {
     case "test" => log.info("received test")
     case WorkflowExecutionProtocol.Create(workflowId) => {
       implicit val timeout = Timeout(1 seconds)
-      log.info(s"creating workflow execution for workflow with id with id: $workflowId and idx: $currentIndex\n")
+      log.info(s"creating workflow execution for workflow for id $workflowId\n")
 
       // get reference to the other table to check the existence of the workflow
       val workflowTable = context.actorSelection("/user/workflowTableActor")
@@ -57,7 +57,7 @@ class WorkflowExecutionTable extends Actor {
       val exec = store.get((workflowId, workflowExecutionId))
       val response = exec match {
         case None => Left(WorkflowExecutionProtocol.NoExecution)
-        case Some(execution) if execution.remainingStep <= 1 => {
+        case Some(execution) if execution.remainingStep <= 0 => {
           Left(WorkflowExecutionProtocol.ExecutionFinished)
         }
         case Some(execution) => {
@@ -65,6 +65,12 @@ class WorkflowExecutionTable extends Actor {
           Right()
         }
       }
+      sender ! response
+    }
+
+    case WorkflowExecutionProtocol.Query(workflowId, workflowExecutionId) => {
+      val response = store.get((workflowId, workflowExecutionId))
+      log.info(s"querying stuff: ${response}")
       sender ! response
     }
 

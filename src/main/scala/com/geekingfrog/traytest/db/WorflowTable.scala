@@ -20,12 +20,11 @@ class WorkflowTable extends Actor {
       log.info(s"creating workflow with id: $currentIndex")
       val idx = currentIndex
       store.put(currentIndex, Workflow(id=idx, numberOfSteps=numberOfSteps))
-      log.info(s"$store\n")
       currentIndex += 1
       sender() ! idx
     }
     case WorkflowProtocol.Query(id) => {
-      log.info(s"querying store for id $id\n${this.store}\n")
+      log.info(s"querying store for id $id\n")
       sender() ! store.get(id)
     }
     case _      => log.info("received unknown message")

@@ -94,10 +94,13 @@ object WebServer extends JsonSupport {
 
               val resp = execution match {
                 case None => HttpResponse(404)
-                case Some(execution) => HttpResponse(200, entity=WorkflowQuery(true).toJson.toString)
+                case Some(execution) => {
+                  val payload = WorkflowQuery(finished=execution.remainingStep<=0)
+                  HttpResponse(200, entity=payload.toJson.toString)
+                }
               }
 
-              complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"query status for workflow $workflowId exec $executionId"))
+              complete(resp)
             }
 
           }
