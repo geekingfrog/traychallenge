@@ -9,6 +9,7 @@ import akka.http.scaladsl.server.ValidationRejection
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import scala.io.StdIn
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 
 import akka.util.Timeout
 import scala.concurrent.duration._
@@ -19,7 +20,7 @@ import com.geekingfrog.traytest.db.{WorkflowTable, WorkflowExecutionTable}
 import com.geekingfrog.traytest.protocol.{workflowProtocol => WorkflowProtocol}
 import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowExecutionProtocol}
 
-object WebServer {
+object WebServer extends JsonSupport {
   def main(args: Array[String]): Unit = {
 
     implicit val system = ActorSystem("worflow-manager")
@@ -30,16 +31,21 @@ object WebServer {
     val workflowTable = system.actorOf(Props[WorkflowTable], "worflowTableActor")
     val workflowExecutionTable = system.actorOf(Props[WorkflowExecutionTable], "worflowExecutionTableActor")
 
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+
     val route =
       pathPrefix("workflows") {
         pathEndOrSingleSlash {
           post {
-            // TODO parse body as json to get the number of steps
-            complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with some steps"))
-            // numberOfSteps match {
-            //   case n if n <= 0 => reject(ValidationRejection(s"yooo $numberOfSteps"))
-            //   case _ => complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with $numberOfSteps steps"))
-            // }
+
+            entity(as[CreateWorkflow]) { createWorkflow =>
+              complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with some steps ${createWorkflow.number_of_steps}"))
+              createWorkflow.number_of_steps match {
+                case n if n <= 0 => reject(ValidationRejection(s"Number of steps should be >0, but got ${n}"))
+                case n => complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with $n steps"))
+              }
+            }
+
           }
         } ~
         pathPrefix(IntNumber / "executions") { workflowId =>
