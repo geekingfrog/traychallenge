@@ -25,8 +25,11 @@ object WebServer extends JsonSupport {
 
     implicit val system = ActorSystem("worflow-manager")
     implicit val materializer = ActorMaterializer()
-    // needed for the future flatMap/onComplete in the end
+    // required for the future flatMap/onComplete in the end
     implicit val executionContext = system.dispatcher
+
+    // required when using actor.ask
+    implicit val timeout = Timeout(1 seconds)
 
     val workflowTable = system.actorOf(Props[WorkflowTable], "worflowTableActor")
     val workflowExecutionTable = system.actorOf(Props[WorkflowExecutionTable], "worflowExecutionTableActor")
@@ -42,7 +45,11 @@ object WebServer extends JsonSupport {
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with some steps ${createWorkflow.number_of_steps}"))
               createWorkflow.number_of_steps match {
                 case n if n <= 0 => reject(ValidationRejection(s"Number of steps should be >0, but got ${n}"))
-                case n => complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with $n steps"))
+                case n => {
+                  val future = workflowTable ? WorkflowProtocol.Create(n)
+                  val result = Await.result(future, timeout.duration).asInstanceOf[Int]
+                  complete { WorkflowCreated(result) }
+                }
               }
             }
 
