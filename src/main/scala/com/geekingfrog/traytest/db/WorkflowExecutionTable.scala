@@ -19,16 +19,19 @@ import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowE
 
 class WorkflowExecutionTable extends Actor {
   val log = Logging(context.system, this)
-  var store = new HashMap[Int, WorkflowExecution]()
+  var store = new HashMap[(Int, Int), WorkflowExecution]()
   var currentIndex: Int = 0
-  val workflowTable = context.actorOf(Props[WorkflowTable], "worflowTableActor")
 
   def receive = {
     case "test" => log.info("received test")
-    case WorkflowExecutionProtocol.Create(requestId) => {
+    case WorkflowExecutionProtocol.Create(workflowId) => {
       implicit val timeout = Timeout(1 seconds)
-      log.info(s"creating workflow execution for workflow with id with id: $requestId")
-      val futureWorkflow = workflowTable ? WorkflowProtocol.Query(requestId)
+      log.info(s"creating workflow execution for workflow with id with id: $workflowId and idx: $currentIndex\n")
+
+      // get reference to the other table to check the existence of the workflow
+      val workflowTable = context.actorSelection("/user/workflowTableActor")
+
+      val futureWorkflow = workflowTable ? WorkflowProtocol.Query(workflowId)
       val result = Await.result(futureWorkflow, timeout.duration).asInstanceOf[Option[Workflow]]
 
       val response = result match {
@@ -37,24 +40,34 @@ class WorkflowExecutionTable extends Actor {
           val idx = currentIndex
           currentIndex += 1
           val workflowExecution = WorkflowExecution(
-            id=workflow.id,
-            workflowId=idx,
+            id=idx,
+            workflowId=workflow.id,
             remainingStep=workflow.numberOfSteps,
             creationDate=OffsetDateTime.now()
             )
-          store.put(idx, workflowExecution)
+          store.put((workflow.id, idx), workflowExecution)
           Some(workflowExecution)
         }
       }
 
       sender ! response
-
-          // val result = Await.result(future, timeout.duration)
-          // complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "result: " + result))
-      // store.put(currentIndex, Workflow(id=currentIndex, numberOfSteps=numberOfSteps))
-      // sender() ! currentIndex
-      // currentIndex += 1
     }
+
+    case WorkflowExecutionProtocol.Exec(workflowId, workflowExecutionId) => {
+      val exec = store.get((workflowId, workflowExecutionId))
+      val response = exec match {
+        case None => Left(WorkflowExecutionProtocol.NoExecution)
+        case Some(execution) if execution.remainingStep <= 1 => {
+          Left(WorkflowExecutionProtocol.ExecutionFinished)
+        }
+        case Some(execution) => {
+          store.put((workflowId, workflowExecutionId), execution.copy(remainingStep=execution.remainingStep-1))
+          Right()
+        }
+      }
+      sender ! response
+    }
+
     case _      => log.info("received unknown message")
   }
 }

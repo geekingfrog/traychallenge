@@ -15,6 +15,9 @@ import akka.util.Timeout
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, ExecutionContext}
 
+// required to bring implicit conversion to marshall entity back to client
+import spray.json._
+
 import com.geekingfrog.traytest._
 import com.geekingfrog.traytest.db.{WorkflowTable, WorkflowExecutionTable}
 import com.geekingfrog.traytest.protocol.{workflowProtocol => WorkflowProtocol}
@@ -25,13 +28,14 @@ object WebServer extends JsonSupport {
 
     implicit val system = ActorSystem("worflow-manager")
     implicit val materializer = ActorMaterializer()
+
     // required for the future flatMap/onComplete in the end
     implicit val executionContext = system.dispatcher
 
     // required when using actor.ask
     implicit val timeout = Timeout(1 seconds)
 
-    val workflowTable = system.actorOf(Props[WorkflowTable], "worflowTableActor")
+    val workflowTable = system.actorOf(Props[WorkflowTable], "workflowTableActor")
     val workflowExecutionTable = system.actorOf(Props[WorkflowExecutionTable], "worflowExecutionTableActor")
 
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
@@ -42,13 +46,13 @@ object WebServer extends JsonSupport {
           post {
 
             entity(as[CreateWorkflow]) { createWorkflow =>
-              complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating workflow with some steps ${createWorkflow.number_of_steps}"))
               createWorkflow.number_of_steps match {
                 case n if n <= 0 => reject(ValidationRejection(s"Number of steps should be >0, but got ${n}"))
                 case n => {
                   val future = workflowTable ? WorkflowProtocol.Create(n)
                   val result = Await.result(future, timeout.duration).asInstanceOf[Int]
-                  complete { WorkflowCreated(result) }
+                  val payload = WorkflowCreated(workflow_id=result.toString)
+                  complete(HttpResponse(201, entity=payload.toJson.toString))
                 }
               }
             }
@@ -58,36 +62,47 @@ object WebServer extends JsonSupport {
         pathPrefix(IntNumber / "executions") { workflowId =>
           pathEndOrSingleSlash {
             post {
-              complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"creating new execution workflow for $workflowId"))
+              val future = workflowExecutionTable ? WorkflowExecutionProtocol.Create(workflowId)
+              val workflow = Await.result(future, timeout.duration).asInstanceOf[Option[WorkflowExecution]]
+
+              val resp = workflow match {
+                case None => HttpResponse(404)
+                case Some(workflowExecution) => {
+                  val payload = WorkflowExecutionCreated(workflowExecution.id.toString)
+                  HttpResponse(201, entity=payload.toJson.toString)
+                }
+              }
+
+              complete(resp)
             }
           } ~
           pathPrefix(IntNumber) { executionId =>
             put {
-              complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"Executing $executionId for workflow $workflowId"))
+              val future = workflowExecutionTable ? WorkflowExecutionProtocol.Exec(workflowId, executionId)
+              val execution = Await.result(future, timeout.duration).asInstanceOf[Either[WorkflowExecutionProtocol.ExecutionError, Unit]]
+
+              val resp = execution match {
+                case Left(WorkflowExecutionProtocol.NoExecution) => HttpResponse(404)
+                case Left(WorkflowExecutionProtocol.ExecutionFinished) => HttpResponse(400)
+                case _ => HttpResponse(204)
+              }
+              complete(resp)
             } ~
             get {
+              val future = workflowExecutionTable ? WorkflowExecutionProtocol.Query(workflowId, executionId)
+              val execution = Await.result(future, timeout.duration).asInstanceOf[Option[WorkflowExecution]]
+
+              val resp = execution match {
+                case None => HttpResponse(404)
+                case Some(execution) => HttpResponse(200, entity=WorkflowQuery(true).toJson.toString)
+              }
+
               complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"query status for workflow $workflowId exec $executionId"))
             }
+
           }
         }
       }
-
-      // path("workflows" / IntNumber) { stuff =>
-      //   complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"yooo"))
-      // } ~
-      //
-      // path("hello") {
-      //   get {
-      //     implicit val timeout = Timeout(1 seconds)
-      //     workflowTable ! WorkflowProtocol.Create(10)
-      //     val future = workflowExecutionTable ? WorkflowExecutionProtocol.Create(0)
-      //     val result = Await.result(future, timeout.duration).asInstanceOf[Option[WorkflowExecution]]
-      //     complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, s"got stuff: $result"))
-      //     // val future = workflowTable ? WorkflowProtocol.Create(213)
-      //     // val result = Await.result(future, timeout.duration)
-      //     // complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "result: " + result))
-      //   }
-      // }
 
     val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
 
