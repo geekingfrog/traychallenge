@@ -1,6 +1,7 @@
 package com.geekingfrog.traytest.db
 
 import akka.actor.Actor
+import akka.actor.ActorRef
 import akka.actor.Props
 import akka.event.Logging
 import akka.pattern.ask
@@ -17,25 +18,16 @@ import com.geekingfrog.traytest.db._
 import com.geekingfrog.traytest.protocol.{workflowProtocol => WorkflowProtocol}
 import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowExecutionProtocol}
 
-class WorkflowExecutionTable extends Actor {
+class WorkflowExecutionTable(workflowTable: ActorRef) extends Actor {
   val log = Logging(context.system, this)
-  var store = new HashMap[(Int, Int), WorkflowExecution]()
+  val store = new HashMap[(Int, Int), WorkflowExecution]()
   var currentIndex: Int = 0
-
-  override def preStart() {
-    print(s"starting workflowExectable here\n")
-  }
-  print(s"INIT workflowExectable here\n")
-
 
   def receive = {
     case "test" => log.info("received test")
     case WorkflowExecutionProtocol.Create(workflowId) => {
       implicit val timeout = Timeout(1 seconds)
       log.info(s"creating workflow execution for workflow for id $workflowId\n")
-
-      // get reference to the other table to check the existence of the workflow
-      val workflowTable = context.actorSelection("/user/workflowTableActor")
 
       val futureWorkflow = workflowTable ? WorkflowProtocol.Query(workflowId)
       val result = Await.result(futureWorkflow, timeout.duration).asInstanceOf[Option[Workflow]]

@@ -14,11 +14,6 @@ class WorkflowTable extends Actor {
   private var store = new HashMap[Int, Workflow]()
   private var currentIndex: Int = 0
 
-  override def preStart() {
-    print(s"starting workflowtable here\n")
-  }
-  print(s"INIT workflowtable here\n")
-
   def receive = {
     case "test" => log.info("received test")
     case WorkflowProtocol.Create(numberOfSteps) => {
