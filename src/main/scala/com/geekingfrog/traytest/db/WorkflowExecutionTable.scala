@@ -11,7 +11,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, ExecutionContext}
 
 import scala.collection.mutable.HashMap
-import java.time.OffsetDateTime
+import java.time.{ OffsetDateTime, Duration }
 
 import com.geekingfrog.traytest.{Workflow, WorkflowExecution}
 import com.geekingfrog.traytest.db._
@@ -20,7 +20,7 @@ import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowE
 
 class WorkflowExecutionTable(workflowTable: ActorRef) extends Actor {
   val log = Logging(context.system, this)
-  val store = new HashMap[(Int, Int), WorkflowExecution]()
+  var store = new HashMap[(Int, Int), WorkflowExecution]()
   var currentIndex: Int = 0
 
   def receive = {
@@ -70,6 +70,12 @@ class WorkflowExecutionTable(workflowTable: ActorRef) extends Actor {
       val response = store.get((workflowId, workflowExecutionId))
       log.info(s"querying stuff: ${response}")
       sender ! response
+    }
+
+    case WorkflowExecutionProtocol.DeleteOld => {
+      val now = OffsetDateTime.now()
+      // remove executions finished and older than 1 minute
+      store = store.filter({case (_, exec) => Duration.between(exec.creationDate, now).toMinutes < 1 && exec.remainingStep > 0})
     }
 
     case _      => log.info("received unknown message")

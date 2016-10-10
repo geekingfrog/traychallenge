@@ -22,6 +22,8 @@ import com.geekingfrog.traytest._
 import com.geekingfrog.traytest.db.{WorkflowTable, WorkflowExecutionTable}
 import com.geekingfrog.traytest.protocol.{workflowProtocol => WorkflowProtocol}
 import com.geekingfrog.traytest.protocol.{workflowExecutionProtocol => WorkflowExecutionProtocol}
+import com.geekingfrog.traytest.protocol.tick.Tick
+
 
 object WebServer extends JsonSupport {
   def main(args: Array[String]): Unit = {
@@ -41,6 +43,9 @@ object WebServer extends JsonSupport {
     )
 
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+
+    val cronActor = system.actorOf(Props(classOf[CronActor], workflowExecutionTable))
+    system.scheduler.schedule(0 seconds, 1 minute, cronActor, Tick)
 
     val route =
       pathPrefix("workflows") {
