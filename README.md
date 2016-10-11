@@ -13,5 +13,7 @@
 * Data modelling: workflows are immutables, so I can only store the remaining number of steps for
   an execution. That allow to manipulate them without having to query the workflow "table", reducing
   contention.
+  I also chose to use `Int` for the ids for simplicity. In a real system, a uuid would probably
+  be better as it wouldn't require a centralized and synchronized source.
 
 * Concurrency: easy by leveraging akka scheduler to periodically send messages.
