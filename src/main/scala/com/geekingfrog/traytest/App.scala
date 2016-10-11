@@ -114,12 +114,15 @@ object WebServer extends JsonSupport {
         }
       }
 
-    val bindingFuture = Http().bindAndHandle(route, "localhost", 9000)
+    val bindingFuture = Http().bindAndHandle(route, "0.0.0.0", 9000)
 
     println(s"Server online at http://localhost:9000/\nPress RETURN to stop...")
-      StdIn.readLine() // let it run until user presses return
-      bindingFuture
-        .flatMap(_.unbind()) // trigger unbinding from the port
-        .onComplete(_ => system.terminate()) // and shutdown when done
+
+      // useful for dev, but when run inside a docker container, this
+      // will trigger the shutdown of the server after a while :(
+      // StdIn.readLine() // let it run until user presses return
+      // bindingFuture
+      //   .flatMap(_.unbind()) // trigger unbinding from the port
+      //   .onComplete(_ => system.terminate()) // and shutdown when done
   }
 }
